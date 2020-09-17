@@ -20,7 +20,15 @@ void input_check(int n) {
     }
 }
 
+void arg_check(int n) {
+    if (n != 2) {
+        printf("Please enter one and only one argument.\n");
+        exit(0);
+    }
+}
+
 int main(int argc, char *argv[]) {
+    arg_check(argc);
     int starting_num = atoi(argv[1]);
     int n = starting_num;
     input_check(starting_num);
