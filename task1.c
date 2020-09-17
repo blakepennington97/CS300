@@ -3,6 +3,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+/* This program implements the Collatz conjecture algorithmn through a forked child process, accepting one argument as the initial integer. */
+
 int collatz_algo(int n) {
     if (n%2 == 0) {
         n = n / 2;
