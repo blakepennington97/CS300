@@ -5,7 +5,6 @@
 
 #define MAX_LINE 80 /* The maximum length of a command */
 #define BUFFER_SIZE 50
-#define buffer "\n\Shell Command History:\n"
 
 char history[10][BUFFER_SIZE]; //stores history commands
 int count = 0;
@@ -92,6 +91,10 @@ int format_command(char input_buffer[], char *args[], int *flag) {
     
     args[ct] = NULL; // if the input line was > 80
 
+    if(strcmp(args[0], "exit") == 0) {
+        exit(0);
+    }
+
     if (strcmp(args[0], "history") == 0) {		
         if (count > 0) {
 		    display_history();
@@ -110,8 +113,8 @@ int format_command(char input_buffer[], char *args[], int *flag) {
             printf("\nNo such command in the history\n");
             strcpy(input_buffer, "Nonexistent command");
 		} 
-		else if (z != -48) { // third letter check 
-            printf("\nNo such command in the history.\n");
+		else if (z != -48) { // third letter check ('0' == 48)
+            printf("\nNo such command in the history. History only extends to ten most recent.\n");
             strcpy(input_buffer, "Nonexistent command");
 		}
 		else {
@@ -123,7 +126,7 @@ int format_command(char input_buffer[], char *args[], int *flag) {
 				strcpy(input_buffer, "Wrong command");
 			}
 			else if (x >= 1) { // Checking for '!n', n >=1
-				strcpy(input_buffer, history[count-x]);
+				strcpy(input_buffer, history[count - x]);
 			}
 			
 		}
