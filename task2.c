@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+//=======================================================================================
+//     Author: Blake Pennington
+//     This program imitates a shell in C.
+//     To use, run and run normal shell commands. To see history, enter history.
+//     To use the ! feature, !x to run command labeled x as seen in history.
+//     You can also enter !! to automatically run the last command.
+//=======================================================================================
+
 #define MAX_LINE 80 /* The maximum length of a command */
 #define BUFFER_SIZE 50
 
@@ -18,12 +26,10 @@ void display_history() {
     int j = 0;
     int histCount = count;
     
-    //loop for iterating through commands
+    //iterates through commands
     for (i = 0; i < 10; i++) {
-        //command index
         printf("%d.  ", histCount);
         while (history[i][j] != '\n' && history[i][j] != '\0') {	
-		//printing command
             printf("%c", history[i][j]);
             j++;
         }
@@ -38,11 +44,9 @@ void display_history() {
 } 
 
 
-
-//Gets the command from shell, tokenizes it and set the args parameter
 int format_command(char input_buffer[], char *args[], int *flag) {
-   	int length; // # of chars in command line
-    int i;     // loop index for input_buffer
+   	int length;
+    int i;     
     int start;  // index of beginning of next command
     int ct = 0; // index of where to place the next parameter into args[]
     int hist;
@@ -50,23 +54,23 @@ int format_command(char input_buffer[], char *args[], int *flag) {
  	length = read(STDIN_FILENO, input_buffer, MAX_LINE);	
     start = -1;
     if (length == 0) {
-        exit(0);   //end of command
+        exit(0);  
     }
     if (length < 0) {
         printf("Command not read\n");
-        exit(-1);  //terminate
+        exit(-1); 
     }
     
    //examines each character
     for (i = 0; i < length; i++) {
         switch (input_buffer[i]) {
             case ' ':
-            case '\t':               // to seperate arguments
+            case '\t':
                 if (start != -1) {
                     args[ct] = &input_buffer[start];    
                     ct++;
                 }
-                input_buffer[i] = '\0'; // add a null char at the end
+                input_buffer[i] = '\0'; //null char
                 start = -1;
                 break;
                 
@@ -83,7 +87,7 @@ int format_command(char input_buffer[], char *args[], int *flag) {
                 if (start == -1)
                     start = i;
                 if (input_buffer[i] == '&') {
-                    *flag = 1; //this flag is the differentiate whether the child process is invoked in background
+                    *flag = 1; 
                     input_buffer[i] = '\0';
                 }
         }
@@ -105,28 +109,32 @@ int format_command(char input_buffer[], char *args[], int *flag) {
 		return -1;
     }
 
-	else if (args[0][0] - '!' == 0) {	
-        int x = args[0][1] - '0'; 
-		int z = args[0][2] - '0'; 
-		
-		if (x > count) { // second letter check 
+	else if (args[0][0] - '!' == 0) {
+        char str[MAX_LINE/2 + 1];
+        str[0] = args[0][1];
+        str[1] = args[0][2];
+
+		int actual = atoi(str);
+
+        if (actual > count) {
             printf("\nNo such command in the history\n");
             strcpy(input_buffer, "Nonexistent command");
-		} 
-		else if (z != -48) { // third letter check ('0' == 48)
-            printf("\nNo such command in the history. History only extends to ten most recent.\n");
-            strcpy(input_buffer, "Nonexistent command");
-		}
-		else {
-			if (x == -15) { // Checking for '!!', ascii value of '!' is 33.
-        	    strcpy(input_buffer, history[0]);  // this will be your 10th(last) command
+        }
+        else {
+			if (str[0] == '!') { // Checking for '!!'
+                if (*history[0] == '\0') {
+                    printf("No commands in history.\n");
+                }
+                else {  
+        	        strcpy(input_buffer, history[0]);  // this will be your last command
+                }
 			}
-			else if (x == 0) { // Checking for '!0'
+			else if (str[0] == '0') { // Checking for '!0'
 				printf("Enter proper command");
-				strcpy(input_buffer, "Wrong command");
+				strcpy(input_buffer, "Nonexistant command");
 			}
-			else if (x >= 1) { // Checking for '!n', n >=1
-				strcpy(input_buffer, history[count - x]);
+			else if (actual >= 1) { // Checking for '!n'
+				strcpy(input_buffer, history[count - actual]);
 			}
 			
 		}
@@ -139,9 +147,9 @@ int format_command(char input_buffer[], char *args[], int *flag) {
     strcpy(history[0], input_buffer); // Updating the history array with input buffer
     count++;
 
-    if (count > 10) {
+    /* if (count > 10) {
         count = 10;
-    }
+    } */
 }
 
 int main(void) {
