@@ -3,11 +3,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-//==========================================================================================================================================
+//===========================================================================================
 // Author: Blake Pennington
-// This program implements the Collatz conjecture algorithmn through a forked child process, accepting one argument as the initial integer.
+// This program implements the Collatz conjecture algorithmn through a forked child process.
+// Accepts one argument as the initial integer.
 // To use, simply run the program with a positive integer as the argument.
-//==========================================================================================================================================
+//============================================================================================
 
 int collatz_algo(int n) {
     if (n%2 == 0) {

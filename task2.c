@@ -8,6 +8,7 @@
 //     This program imitates a shell in C.
 //     To use, run and run normal shell commands. To see history, enter history.
 //     To use the ! feature, !x to run command labeled x as seen in history.
+//     To use the & feature, enter the command followed by a &. Ex: ls&
 //     You can also enter !! to automatically run the last command.
 //=======================================================================================
 
@@ -48,7 +49,7 @@ int format_command(char input_buffer[], char *args[], int *flag) {
    	int length;
     int i;     
     int start;  // index of beginning of next command
-    int ct = 0; // index of where to place the next parameter into args[]
+    int xx = 0; // index of where to place the next parameter into args[]
     int hist;
     
  	length = read(STDIN_FILENO, input_buffer, MAX_LINE);	
@@ -67,8 +68,8 @@ int format_command(char input_buffer[], char *args[], int *flag) {
             case ' ':
             case '\t':
                 if (start != -1) {
-                    args[ct] = &input_buffer[start];    
-                    ct++;
+                    args[xx] = &input_buffer[start];    
+                    xx++;
                 }
                 input_buffer[i] = '\0'; //null char
                 start = -1;
@@ -76,11 +77,11 @@ int format_command(char input_buffer[], char *args[], int *flag) {
                 
             case '\n': //final char 
                 if (start != -1) {
-                    args[ct] = &input_buffer[start];
-                    ct++;
+                    args[xx] = &input_buffer[start];
+                    xx++;
                 }
                 input_buffer[i] = '\0';
-                args[ct] = NULL; // no more args
+                args[xx] = NULL; // no more args
                 break;
                 
             default:           
@@ -93,7 +94,7 @@ int format_command(char input_buffer[], char *args[], int *flag) {
         }
     }
     
-    args[ct] = NULL; // if the input line was > 80
+    args[xx] = NULL; // if the input line was > 80
 
     if(strcmp(args[0], "exit") == 0) {
         exit(0);
