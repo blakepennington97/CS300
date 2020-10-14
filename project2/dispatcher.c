@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
-#include "./sigtrap.c"
+//#include "./sigtrap.c"
 
 int job_dispatch_list[1000][1000];
 int job_dispatch_list_length = 0;
@@ -125,7 +125,7 @@ void FCFS() {
     //Start dispatcher timer (dispatcher timer = 0)
     clock_t start_time = clock();
     //While there's anything in the queue or there is a currently running process:
-    pid_t pid = fork();
+    //pid_t pid = fork();
     //while(dispatcher_queue != NULL) {
         //If a process is currently running; 
 
