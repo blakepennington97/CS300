@@ -1,205 +1,234 @@
 // Pennington.Jesse
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include <signal.h>
 #include <time.h>
-//#include "./sigtrap.c"
+#include <wait.h>
 
-int job_dispatch_list[1000][1000];
-int job_dispatch_list_length = 0;
+#define UNDEFINED 0
+#define INITIALIZED 1
+#define READY 2
+#define RUNNING 3
+#define SUSPENDED 4
+#define TERMINATED 5
 
 // A linked list (LL) node to store a queue entry 
-struct QNode { 
+struct queue { 
+    pid_t pid;
+    char *args[3];
 	int arrival_time;
     int priority;
     int processor_time; 
-	struct QNode* next; 
+    int status;
+	struct queue* next; 
 }; 
 
-// The queue, front stores the front node of LL and rear stores the 
-// last node of LL 
-struct Queue { 
-	struct QNode *front, *rear; 
-}; 
-
-// A utility function to create a new linked list node. 
-struct QNode* newNode(int arrival_time, int priority, int processor_time) 
-{ 
-	struct QNode* temp = (struct QNode*)malloc(sizeof(struct QNode)); 
-	temp->arrival_time = arrival_time; 
-	temp->priority = priority; 
-	temp->processor_time = processor_time; 
-	return temp; 
-} 
+typedef struct queue Queue;
+typedef Queue *QueuePtr;
 
 // A utility function to create an empty queue 
-struct Queue* createQueue() 
-{ 
-	struct Queue* q = (struct Queue*)malloc(sizeof(struct Queue)); 
-	q->front = q->rear = NULL; 
-	return q; 
+QueuePtr createQueue() { 
+	QueuePtr new_process = (QueuePtr)malloc(sizeof(Queue)); 
+    new_process->pid = 0;
+    new_process->args[0] = "./process";
+    new_process->args[1] = NULL;
+    new_process->arrival_time = 0;
+    new_process->priority = 0;
+    new_process->processor_time = 0;
+    new_process->status = UNDEFINED;
+    new_process->next = NULL;
+	return new_process; 
 } 
 
-// The function to add a key k to q 
-void enQueue(struct Queue* q, int arrival_time, int priority, int processor_time) 
-{ 
-	// Create a new LL node 
-	struct QNode* temp = newNode(arrival_time, priority, processor_time); 
-
-	// If queue is empty, then new node is front and rear both 
-	if (q->rear == NULL) { 
-		q->front = q->rear = temp; 
-		return; 
-	} 
-
-	// Add the new node at the end of queue and change rear 
-	q->rear->next = temp; 
-	q->rear = temp; 
-} 
-
-// Function to remove a key from given queue q 
-void deQueue(struct Queue* q) 
-{ 
-	// If queue is empty, return NULL. 
-	if (q->front == NULL) 
-		return; 
-
-	// Store previous front and move front one node ahead 
-	struct QNode* temp = q->front; 
-
-	q->front = q->front->next; 
-
-	// If front becomes NULL, then change rear also as NULL 
-	if (q->front == NULL) 
-		q->rear = NULL; 
-
-	free(temp); 
-}
-
-struct pcb {
-    pid_t pid;
-    char *args[10];
-    int arrival_time;
-    int remaining_time;
-    struct pcb *next;
-};
-
-typedef struct pcb PCB;
-typedef PCB *PcbPtr;
-
-struct {
-    int arrival_time;
-    int priority;
-    int processor_time;
-} Process;
-
-
-void printQueue(struct Queue *queue) {
-    printf("\n\nJob Queue:\n");
-    struct QNode *temp = (struct QNode*)malloc(sizeof(struct QNode));
-    temp = queue->front;
-    while (temp != NULL) {
-        printf("%d ", temp->arrival_time);
-        printf("%d ", temp->priority);
-        printf("%d\n", temp->processor_time);
-        temp = temp->next;
+// Function to add process to the end of input_queue
+QueuePtr enQueue(QueuePtr input_queue, QueuePtr process) { 
+    QueuePtr temp = input_queue;
+    process->next = NULL;
+    //if queue contains entries already
+    if (input_queue) {
+        while (input_queue->next) {
+            input_queue = input_queue->next;
+        }
+        input_queue->next = process;
+        return temp;
     }
-    printf("Finished bitches.\n");
+    return process;
+} 
+
+// Function to remove a process from front of input_queue
+QueuePtr deQueue(QueuePtr *process) { 
+	QueuePtr temp;
+    //could i do temp = process, then && (temp)?
+    if (process && (temp = *process)) {
+        *process = temp->next;
+        return temp;
+    }
+    return NULL;
 }
 
-void FCFS() {
-    //Intialize dispatcher queue
-    struct Queue *dispatcher_queue = createQueue();
-    //Fill dispatcher queue from dispatch list file
+//looks at multi-level queues and returns largest non-empty queue
+int queue_order_traversal(QueuePtr *temp) {
     int i;
+    int selected_queue;
 
-
-    for (i = 0; i < job_dispatch_list_length; i++) {
-        enQueue(dispatcher_queue, job_dispatch_list[i][0], job_dispatch_list[i][1], job_dispatch_list[i][2]);
-    }
-    printQueue(dispatcher_queue);
-    //Start dispatcher timer (dispatcher timer = 0)
-    clock_t start_time = clock();
-    //While there's anything in the queue or there is a currently running process:
-    //pid_t pid = fork();
-    //while(dispatcher_queue != NULL) {
-        //If a process is currently running; 
-
-    execvp("./process", dispatcher_queue->front->processor_time);
-    //}
-}
-
-void readFromInputFile() {
-    FILE *fp;
-    char *line;
-    size_t len = 0;
-    ssize_t read;
-    char *token;
-    int i, j;
-
-    fp = fopen("input.txt", "r");
-
-    if (fp == NULL) {
-        exit(0);
-    }
-    //parse
-    for (i = 0; (read = getline(&line, &len, fp)) != -1; i++) {
-        printf("Retrieved line of length %zu:\n", read);
-        printf("%s", line);
-        token = strtok(line, ",");
-        j = 0;
-        while (token != NULL) {
-            job_dispatch_list[i][j] = atoi(token);
-            token = strtok(NULL, ",");
-            j++;
+    for (i = 0; i < 4; i++) {
+        if (temp[i]) {
+            selected_queue = i;
+            return selected_queue;
         }
     }
-    job_dispatch_list_length = i;
+    //else return negative
+    return -1;
+}
 
+void readFromInputFile(char *file_name, QueuePtr input_queue, QueuePtr process) {
+    FILE *fp;
+    fp = fopen(file_name, "r");
+
+    if (fp == NULL) {
+        printf("Error in opening input file.\n");
+        exit(0);
+    }
+
+    //parse input file and put into the input_queue
+    while (!feof(fp)) {
+        process = createQueue();
+        if (fscanf(fp, "%d, %d, %d", &(process->arrival_time), &(process->priority), &(process->processor_time)) != 3) {
+                free(process);
+                continue;
+        }
+        process->status = INITIALIZED;
+        printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
+        input_queue = enQueue(input_queue, process);
+    }
     fclose(fp);
-    if (line) {
-        free(line);
-    }
+    printf("finished reading file\n");
 }
 
-void printJobList() {
-    printf("\n\nJob Dispatch List:\n");
+QueuePtr startProcess(QueuePtr processNode) {
+    //if process isn't suspended, start process
+    if (processNode->pid == 0) {
+        processNode->pid = fork();
+        if (processNode->pid == 0) {
+            processNode->pid = getpid();
+            processNode->status = RUNNING;
+            execvp(processNode->args[0], processNode->args);
+            perror(processNode->args[0]);
+            exit(2);
+        }
+        else if (processNode->pid == -1) {
+            printf("forking error\n");
+            exit(1);
+        }
+    }
+    //restart the process
+    else {
+        kill(processNode->pid, SIGCONT);
+    }
+    processNode->status = RUNNING;
+    return processNode;
+}
+
+QueuePtr suspendProcess(QueuePtr processNode) {
+    int status;
+    kill(processNode->pid, SIGSTOP);
+    waitpid(processNode->pid, &status, WUNTRACED);
+    processNode->status = SUSPENDED;
+
+}
+
+QueuePtr terminateProcess(QueuePtr processNode) {
+    int status;
+    kill(processNode->pid, SIGINT);
+    waitpid(processNode->pid, &status, WUNTRACED);
+    processNode->status = TERMINATED;
+    return processNode;
+}
+
+QueuePtr restartProcess(QueuePtr processNode) {
+    terminateProcess(processNode);
+    startProcess(processNode);
+}
+
+
+
+
+
+int main(int argc, char **argv) {
+    QueuePtr input_queue = NULL;
+    QueuePtr user_queue[4];
+    QueuePtr current_process = NULL;
+    QueuePtr process = NULL;
     int i;
-    for (i = 0; i < job_dispatch_list_length; i++) {
-        printf("%d ", job_dispatch_list[i][0]);
-        printf("%d ", job_dispatch_list[i][1]);
-        printf("%d\n", job_dispatch_list[i][2]);
+    int timer = 0;
+    // FILE *fp;
+    // fp = fopen(argv[1], "r");
+    // if (fp == NULL) {
+    //     printf("Error in opening file.\n");
+    //     exit(1);
+    // }
+
+    if (argc < 2) {
+        printf("Usage: ./dispatcher.c <inputFile.txt>\n");
+        exit(1);
     }
-}
 
+    //init array full of NULLs
+    for (i = 0; i < 4; i++) {
+        user_queue[i] = NULL;
+    }
 
+    readFromInputFile(argv[1], &input_queue, &process);
+    // while (!feof(fp)) {
+    //     process = newQueue();
+    //     if (fscanf(fp, "%d, %d, %d", &(process->arrival_time), &(process->priority), &(process->processor_time)) != 3) {
+    //         free(process);
+    //         continue;
+    //     }
+    //     process->status = INITIALIZED;
+    //     //printf("Just read: %d %d %d\n",process->arrivalTime, process->priority, process->processorTime);
+    //     input_queue = enqueue(input_queue, process);
+    // }
 
+    while (input_queue || current_process || (queue_order_traversal(user_queue) > -1)) {
+        while (input_queue && input_queue->arrival_time <= timer) {
+            process = deQueue(&input_queue);
+            process->status = READY;
+            process->priority = 0;
+            //adjust
+            user_queue[process->priority] = enQueue(user_queue[process->priority], process);
+        }
+        if (current_process && current_process->status == RUNNING) {
+            current_process->processor_time--;
+            //if process runs out of time, kill it :(
+            if (current_process->processor_time < 1) {
+                current_process = terminateProcess(current_process);
+                free(current_process);
+                //current_process = NULL; requireD??
+            }
+            //if anything waiting, suspend current process and reduce priority
+            else if (queue_order_traversal(user_queue) > -1) {
+                suspendProcess(current_process);
+                //correction
+                if ((current_process->priority + 1) > 3) {
+                    current_process->priority = 3;
+                }
+                //place in correct priority order
+                user_queue[current_process->priority] == enQueue(user_queue[current_process->priority], current_process);
+                current_process = NULL;
+            }
+        }
+        //if user queue NOT empty and no processes running, deQueue from user queue and run it
+        if(queue_order_traversal(user_queue) && !current_process) {
+            i = queue_order_traversal(user_queue);
+            current_process = deQueue(&user_queue[i]);
+            startProcess(current_process);
+        }
+        //increase time and sleep
+        timer++;
+        sleep(1);
 
-void startProcess() {
+    }
 
-}
-
-void suspendProcess() {
-
-}
-
-void restartProcess() {
-
-}
-
-void terminateProcess() {
-
-}
-
-
-
-int main() {
-    readFromInputFile();
-    printJobList();
-    FCFS();
     return 0;
 }
