@@ -20,11 +20,19 @@ struct queue {
     int priority;
     int processor_time; 
     int status;
-	struct queue* next; 
+	struct queue *next; 
 }; 
 
 typedef struct queue Queue;
 typedef Queue *QueuePtr;
+
+QueuePtr startProcess(QueuePtr);
+QueuePtr suspendProcess(QueuePtr);
+QueuePtr terminateProcess(QueuePtr);
+int queue_order_traversal(QueuePtr *);
+QueuePtr createQueue();
+QueuePtr enQueue(QueuePtr, QueuePtr);
+QueuePtr deQueue(QueuePtr *);
 
 // A utility function to create an empty queue 
 QueuePtr createQueue() { 
@@ -108,17 +116,28 @@ void readFromInputFile(char *file_name, QueuePtr input_queue, QueuePtr process) 
 QueuePtr startProcess(QueuePtr processNode) {
     //if process isn't suspended, start process
     if (processNode->pid == 0) {
-        processNode->pid = fork();
-        if (processNode->pid == 0) {
-            processNode->pid = getpid();
-            processNode->status = RUNNING;
-            execvp(processNode->args[0], processNode->args);
-            perror(processNode->args[0]);
-            exit(2);
-        }
-        else if (processNode->pid == -1) {
-            printf("forking error\n");
-            exit(1);
+        // processNode->pid = fork();
+        // if (processNode->pid == 0) {
+        //     processNode->pid = getpid();
+        //     processNode->status = RUNNING;
+        //     execvp(processNode->args[0], processNode->args);
+        //     perror(processNode->args[0]);
+        //     exit(2);
+        // }
+        // else if (processNode->pid == -1) {
+        //     printf("forking error\n");
+        //     exit(1);
+        // }
+        switch (processNode->pid = fork()) {
+            case -1:
+                perror("startProcess");
+                exit(1);
+            case 0:
+                processNode->pid = getpid();
+                processNode->status = RUNNING;
+                execvp (processNode->args[0], processNode->args);
+                perror (processNode->args[0]);
+                exit (2);
         }
     }
     //restart the process
@@ -131,10 +150,10 @@ QueuePtr startProcess(QueuePtr processNode) {
 
 QueuePtr suspendProcess(QueuePtr processNode) {
     int status;
-    kill(processNode->pid, SIGSTOP);
+    kill(processNode->pid, SIGTSTP);
     waitpid(processNode->pid, &status, WUNTRACED);
     processNode->status = SUSPENDED;
-
+    return processNode;
 }
 
 QueuePtr terminateProcess(QueuePtr processNode) {
@@ -159,38 +178,41 @@ int main(int argc, char **argv) {
     QueuePtr user_queue[4];
     QueuePtr current_process = NULL;
     QueuePtr process = NULL;
+    FILE *fp;
     int i;
     int timer = 0;
-    // FILE *fp;
-    // fp = fopen(argv[1], "r");
-    // if (fp == NULL) {
-    //     printf("Error in opening file.\n");
-    //     exit(1);
-    // }
+
+    printf("file name: %s\n", argv[1]);
+    fp = fopen(argv[1], "r");
+    if (fp == NULL) {
+        printf("Error in opening file.\n");
+        exit(1);
+    }
 
     if (argc < 2) {
-        printf("Usage: ./dispatcher.c <inputFile.txt>\n");
+        printf("Usage: ./dispatcher.c <sampleInput.txt>\n");
         exit(1);
     }
 
     //init array full of NULLs
-    for (i = 0; i < 4; i++) {
-        user_queue[i] = NULL;
+    // for (i = 0; i < 4; i++) {
+    //     user_queue[i] = NULL;
+    // }
+    for(i = 0; i < 4; user_queue[i++] = NULL);
+
+    //readFromInputFile(argv[1], &input_queue, &process);
+    while (!feof(fp)) {
+        process = createQueue();
+        if (fscanf(fp, "%d, %d, %d", &(process->arrival_time), &(process->priority), &(process->processor_time)) != 3) {
+            free(process);
+            continue;
+        }
+        process->status = INITIALIZED;
+        printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
+        input_queue = enQueue(input_queue, process);
     }
 
-    readFromInputFile(argv[1], &input_queue, &process);
-    // while (!feof(fp)) {
-    //     process = newQueue();
-    //     if (fscanf(fp, "%d, %d, %d", &(process->arrival_time), &(process->priority), &(process->processor_time)) != 3) {
-    //         free(process);
-    //         continue;
-    //     }
-    //     process->status = INITIALIZED;
-    //     //printf("Just read: %d %d %d\n",process->arrivalTime, process->priority, process->processorTime);
-    //     input_queue = enqueue(input_queue, process);
-    // }
-
-    while (input_queue || current_process || (queue_order_traversal(user_queue) > -1)) {
+    while (input_queue || current_process || queue_order_traversal(user_queue) >= 0) {
         while (input_queue && input_queue->arrival_time <= timer) {
             process = deQueue(&input_queue);
             process->status = READY;
@@ -201,34 +223,33 @@ int main(int argc, char **argv) {
         if (current_process && current_process->status == RUNNING) {
             current_process->processor_time--;
             //if process runs out of time, kill it :(
-            if (current_process->processor_time < 1) {
+            if (current_process->processor_time <= 0) {
                 current_process = terminateProcess(current_process);
                 free(current_process);
-                //current_process = NULL; requireD??
+                current_process = NULL;
             }
             //if anything waiting, suspend current process and reduce priority
-            else if (queue_order_traversal(user_queue) > -1) {
+            else if (queue_order_traversal(user_queue) >= 0) {
                 suspendProcess(current_process);
                 //correction
-                if ((current_process->priority + 1) > 3) {
-                    current_process->priority = 3;
+                if (++(current_process->priority) >= 4) {
+                    current_process->priority = 4-1;
                 }
                 //place in correct priority order
-                user_queue[current_process->priority] == enQueue(user_queue[current_process->priority], current_process);
+                user_queue[current_process->priority] = enQueue(user_queue[current_process->priority], current_process);
                 current_process = NULL;
             }
         }
         //if user queue NOT empty and no processes running, deQueue from user queue and run it
-        if(queue_order_traversal(user_queue) && !current_process) {
-            i = queue_order_traversal(user_queue);
+        if(!current_process && (i = queue_order_traversal(user_queue)) >= 0) {
+            //i = queue_order_traversal(user_queue);
             current_process = deQueue(&user_queue[i]);
             startProcess(current_process);
         }
         //increase time and sleep
-        timer++;
         sleep(1);
-
+        timer++;
     }
 
-    return 0;
+    exit(0);
 }
