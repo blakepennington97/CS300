@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <time.h>
+//#include <time.h>
 #include <wait.h>
 
 #define UNDEFINED 0
@@ -106,7 +106,7 @@ void readFromInputFile(char *file_name, QueuePtr input_queue, QueuePtr process) 
                 continue;
         }
         process->status = INITIALIZED;
-        printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
+        //printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
         input_queue = enQueue(input_queue, process);
     }
     fclose(fp);
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
     int i;
     int timer = 0;
 
-    printf("file name: %s\n", argv[1]);
+    //printf("file name: %s\n", argv[1]);
     fp = fopen(argv[1], "r");
     if (fp == NULL) {
         printf("Error in opening file.\n");
@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
             continue;
         }
         process->status = INITIALIZED;
-        printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
+        //printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
         input_queue = enQueue(input_queue, process);
     }
 
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
                 suspendProcess(current_process);
                 //correction
                 if (++(current_process->priority) >= 4) {
-                    current_process->priority = 4-1;
+                    current_process->priority = 3;
                 }
                 //place in correct priority order
                 user_queue[current_process->priority] = enQueue(user_queue[current_process->priority], current_process);
