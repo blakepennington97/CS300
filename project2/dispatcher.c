@@ -12,7 +12,6 @@
 #define SUSPENDED 4
 #define TERMINATED 5
 
-// A linked list (LL) node to store a queue entry 
 struct queue { 
     pid_t pid;
     char *args[3];
@@ -26,15 +25,8 @@ struct queue {
 typedef struct queue Queue;
 typedef Queue *QueuePtr;
 
-QueuePtr startProcess(QueuePtr);
-QueuePtr suspendProcess(QueuePtr);
-QueuePtr terminateProcess(QueuePtr);
-int queueOrderTraversal(QueuePtr *);
-QueuePtr createQueue();
-QueuePtr enQueue(QueuePtr, QueuePtr);
-QueuePtr deQueue(QueuePtr *);
 
-// A utility function to create an empty queue 
+//inits queue node
 QueuePtr createQueue() { 
 	QueuePtr new_process = (QueuePtr)malloc(sizeof(Queue)); 
     new_process->pid = 0;
@@ -48,7 +40,7 @@ QueuePtr createQueue() {
 	return new_process; 
 } 
 
-// Function to add process to the end of input_queue
+//adds process to end of input_queue
 QueuePtr enQueue(QueuePtr input_queue, QueuePtr process) { 
     QueuePtr temp = input_queue;
     process->next = NULL;
@@ -63,7 +55,7 @@ QueuePtr enQueue(QueuePtr input_queue, QueuePtr process) {
     return process;
 } 
 
-// Function to remove a process from front of input_queue
+//removes a process from front of input_queue
 QueuePtr deQueue(QueuePtr *process) { 
 	QueuePtr temp;
     //could i do temp = process, then && (temp)?
@@ -106,49 +98,35 @@ void readFromInputFile(char *file_name, QueuePtr input_queue, QueuePtr process) 
                 continue;
         }
         process->status = INITIALIZED;
-        //printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
         input_queue = enQueue(input_queue, process);
     }
     fclose(fp);
     printf("finished reading file\n");
 }
 
+
+//starts a process
 QueuePtr startProcess(QueuePtr processNode) {
     //if process isn't suspended, start process
     if (processNode->pid == 0) {
-        // processNode->pid = fork();
-        // if (processNode->pid == 0) {
-        //     processNode->pid = getpid();
-        //     processNode->status = RUNNING;
-        //     execvp(processNode->args[0], processNode->args);
-        //     perror(processNode->args[0]);
-        //     exit(2);
-        // }
-        // else if (processNode->pid == -1) {
-        //     printf("forking error\n");
-        //     exit(1);
-        // }
-        switch (processNode->pid = fork()) {
-            case -1:
-                perror("startProcess");
-                exit(1);
-            case 0:
-                processNode->pid = getpid();
-                processNode->status = RUNNING;
-                execvp (processNode->args[0], processNode->args);
-                perror (processNode->args[0]);
-                exit (2);
+        processNode->pid = fork();
+        if (processNode->pid == 0) {
+            processNode->pid = getpid();
+            processNode->status = RUNNING;
+            execvp(processNode->args[0], processNode->args);
+            perror(processNode->args[0]);
+            exit(2);
         }
-    }
-    //restart the process
-    else {
-        kill(processNode->pid, SIGCONT);
-        //restartProcess() here?
+        else if (processNode->pid == -1) {
+            printf("forking error\n");
+            exit(1);
+        }
     }
     processNode->status = RUNNING;
     return processNode;
 }
 
+//suspends a process
 QueuePtr suspendProcess(QueuePtr processNode) {
     int status;
     kill(processNode->pid, SIGTSTP);
@@ -157,6 +135,8 @@ QueuePtr suspendProcess(QueuePtr processNode) {
     return processNode;
 }
 
+
+//terminates a process
 QueuePtr terminateProcess(QueuePtr processNode) {
     int status;
     kill(processNode->pid, SIGINT);
@@ -165,15 +145,13 @@ QueuePtr terminateProcess(QueuePtr processNode) {
     return processNode;
 }
 
+
+//restarts a process
 QueuePtr restartProcess(QueuePtr processNode) {
-    int status;
     kill(processNode->pid, SIGCONT);
     processNode->status = RUNNING;
     return processNode;
 }
-
-
-
 
 
 int main(int argc, char **argv) {
@@ -198,10 +176,10 @@ int main(int argc, char **argv) {
     }
 
     //init array full of NULLs
-    // for (i = 0; i < 4; i++) {
-    //     user_queue[i] = NULL;
-    // }
-    for(i = 0; i < 4; user_queue[i++] = NULL);
+    for (i = 0; i < 4; i++) {
+        user_queue[i] = NULL;
+    }
+    //for(i = 0; i < 4; user_queue[i++] = NULL);
 
     //readFromInputFile(argv[1], &input_queue, &process);
     while (!feof(fp)) {
