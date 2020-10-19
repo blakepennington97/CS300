@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-//#include <time.h>
+#include <time.h>
 #include <wait.h>
 
 #define UNDEFINED 0
@@ -29,7 +29,7 @@ typedef Queue *QueuePtr;
 QueuePtr startProcess(QueuePtr);
 QueuePtr suspendProcess(QueuePtr);
 QueuePtr terminateProcess(QueuePtr);
-int queue_order_traversal(QueuePtr *);
+int queueOrderTraversal(QueuePtr *);
 QueuePtr createQueue();
 QueuePtr enQueue(QueuePtr, QueuePtr);
 QueuePtr deQueue(QueuePtr *);
@@ -75,7 +75,7 @@ QueuePtr deQueue(QueuePtr *process) {
 }
 
 //looks at multi-level queues and returns largest non-empty queue
-int queue_order_traversal(QueuePtr *temp) {
+int queueOrderTraversal(QueuePtr *temp) {
     int i;
     int selected_queue;
 
@@ -143,6 +143,7 @@ QueuePtr startProcess(QueuePtr processNode) {
     //restart the process
     else {
         kill(processNode->pid, SIGCONT);
+        //restartProcess() here?
     }
     processNode->status = RUNNING;
     return processNode;
@@ -165,8 +166,10 @@ QueuePtr terminateProcess(QueuePtr processNode) {
 }
 
 QueuePtr restartProcess(QueuePtr processNode) {
-    terminateProcess(processNode);
-    startProcess(processNode);
+    int status;
+    kill(processNode->pid, SIGCONT);
+    processNode->status = RUNNING;
+    return processNode;
 }
 
 
@@ -211,12 +214,13 @@ int main(int argc, char **argv) {
         //printf("Just read: %d %d %d\n",process->arrival_time, process->priority, process->processor_time);
         input_queue = enQueue(input_queue, process);
     }
-
-    while (input_queue || current_process || queue_order_traversal(user_queue) >= 0) {
+    //while stuff in queue or process running
+    while (input_queue || current_process || queueOrderTraversal(user_queue) >= 0) {
+        //while stuff in input_queue and arrival and timer match
         while (input_queue && input_queue->arrival_time <= timer) {
             process = deQueue(&input_queue);
             process->status = READY;
-            process->priority = 0;
+            //process->priority = 0;
             //adjust
             user_queue[process->priority] = enQueue(user_queue[process->priority], process);
         }
@@ -229,11 +233,12 @@ int main(int argc, char **argv) {
                 current_process = NULL;
             }
             //if anything waiting, suspend current process and reduce priority
-            else if (queue_order_traversal(user_queue) >= 0) {
+            else if (queueOrderTraversal(user_queue) >= 0) {
                 suspendProcess(current_process);
                 //correction
-                if (++(current_process->priority) >= 4) {
-                    current_process->priority = 3;
+                //CHANGES MADE HERE
+                if ((current_process->priority) <= 2) {
+                    current_process->priority++;
                 }
                 //place in correct priority order
                 user_queue[current_process->priority] = enQueue(user_queue[current_process->priority], current_process);
@@ -241,12 +246,25 @@ int main(int argc, char **argv) {
             }
         }
         //if user queue NOT empty and no processes running, deQueue from user queue and run it
-        if(!current_process && (i = queue_order_traversal(user_queue)) >= 0) {
-            //i = queue_order_traversal(user_queue);
+        if(!current_process && (i = queueOrderTraversal(user_queue)) >= 0) {
+            // Dequeue a process from the highest priority feedback queue that is not empty
+            //current_process not receiving correctly?
             current_process = deQueue(&user_queue[i]);
-            startProcess(current_process);
+            // b. If already started but suspended, restart it (send SIGCONT to it)
+            if (current_process->status == SUSPENDED) {
+                current_process = restartProcess(current_process);
+            }
+            // else start it (fork & exec)
+            else {
+                current_process = startProcess(current_process);
+            }
+            // c. Set it as currently running process;
+            //i = queueOrderTraversal(user_queue);
+            // current_process = deQueue(&user_queue[i]);
+            // startProcess(current_process);
         }
         //increase time and sleep
+        //printf("me sleep\n");
         sleep(1);
         timer++;
     }
