@@ -1,51 +1,82 @@
 // Pennington.Jesse
+// Doesn't use page replacements
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
-int virtual_addresses_from_file[65536];
-int masked_virtual_addresses[65536];
-int page_number_and_offset[2][65536];
-int page_table[256];
-int TLB[2][16];
+int page_table[256][2];
+int TLB[16][2];
 int physical_memory[256][256];
 int frame_count = 0;
+int available_frame = 0;
+int available_page = 0;
 int page_count = 0;
 int page_fault_count = 0;
+int TLB_count = 0;
+int TLB_hits = 0;
 FILE *backing_store;
 
+void insertTLB(int page_num, int frame_num) {
+    int i;
+    for (i = 0; i < TLB_count; i++) {
+        if (TLB[i][0] == page_num) {
+            break;
+            printf("Entry already in TLB\n");
+            //REMOVE THIS FOR LOOP??
+        }
+    }
 
+    // if index = num entries
+    if (i == TLB_count) {
+        // if space available in TLB, insert page number and frame number
+        if (TLB_count < 16) {
+            TLB[TLB_count][0] = page_num;
+            TLB[TLB_count][1] = frame_num;
+        }
+        // else make space
+        else{ 
+            for (i = 0; i < 15; i++) {
+                TLB[i][0] = TLB[i+1][0];
+                TLB[i][1] = TLB[i+1][1];
+            }
 
+            TLB[TLB_count-1][0] = page_num;
+            TLB[TLB_count-1][1] = frame_num;
+        }
+    }
 
-int producePageNumber(int logical_address) {
-    printf("Virtual address: %d\n", logical_address);
-    int page_number = ((logical_address & 0xFFFF) >> 8);
-    int offset = logical_address & 0xFF;
-    printf("page#: %d offset: %d\n", page_number, offset);
-    return page_number, offset;
+    // if index != num entries
+    else {
+        // move stuff over
+        for (; i < TLB_count - 1; i++) {
+            TLB[i][0] = TLB[i+1][0];
+            TLB[i][1] = TLB[i+1][1];
+        }
+        // if space available
+        if (TLB_count < 16) {
+            TLB[TLB_count][0] = page_num;
+            TLB[TLB_count][1] = frame_num;
+        }
+        // go left one if space NOT available
+        else {
+            TLB[TLB_count-1][0] = page_num;
+            TLB[TLB_count-1][1] = frame_num;
+        }
+    }
+    if (TLB_count < 16) {
+        TLB_count++;
+    }
 }
 
-void getFromPageTable(int page_num, int offset) {
-    int frame_number = -1;
-    //navigate page_table to see if frame exists
-    if (page_table[page_num]) {
-        frame_number = page_table[page_num];
-    }
-    // else if empty, page fault, so read from backing store
-    else if (page_table[page_num] == NULL) { //page fault
-        readBackingStore(page_num);
-        frame_number = frame_count - 1;
-        page_fault_count++;
-    }
-    printf("Page faults: %d\n", page_fault_count);
-}
 
 void readBackingStore(int page_num) {
-    signed char temp[256];
     //seek from beginning of bin
     if (fseek(backing_store, page_num * 256, SEEK_SET) != 0) {
         fprintf(stderr, "Error seeking BACKING_STORE.bin\n");
     }
+
+    signed char temp[256];
     //read 256 bytes from bin
     if (fread(temp, sizeof(signed char), 256, backing_store) == 0) {
         fprintf(stderr, "Error reading BACKING_STORE.bin\n");
@@ -53,13 +84,60 @@ void readBackingStore(int page_num) {
     
     int i;
     for (i = 0; i < 256; i++) {
-        physical_memory[frame_count][i] = temp[i];
+        physical_memory[available_frame][i] = temp[i];
     }
 
-    page_table[page_count] = frame_count;
-    frame_count++;
-    page_count++;
+    page_table[available_page][0] = page_num;
+    page_table[available_page][1] = available_frame;
+    available_frame++;
+    available_page++;
 }
+
+
+void producePageNumber(int logical_address, int *page_number, int *offset) {
+    //printf("page#: %d offset: %d\n", page_num, offset);
+    printf("Virtual address: %d ", logical_address);
+    *page_number = ((logical_address & 0xFFFF) >> 8);
+    *offset = logical_address & 0xFF;
+}
+
+void consultPageTable(int page_num, int offset) {
+    int frame_number = -1;
+    int i;
+    // attempt to obtain frame number from TLB
+    for (i = 0; i < available_page; i++) {
+        if (TLB[i][0] == page_num) {
+            //printf("TLB HIT\n");
+            frame_number = TLB[i][1];
+            TLB_hits++;
+        }
+    }
+
+    // if not found in TLB, attempt to obtain frame number from the page table
+    if (frame_number == -1) {
+        for (i = 0; i < available_page; i++) {
+            if (page_table[i][0] == page_num) {
+                frame_number = page_table[i][1];
+                //printf("TLB MISS w/o NO PAGE FAULT\n");
+            }
+        }
+    }
+     // not found, so read from backing store and page fault
+    if (frame_number == -1) {
+        readBackingStore(page_num);
+        page_fault_count++;
+        frame_number = available_frame - 1;
+        //printf("TLB MISS w/ PAGE FAULT\n");
+    }
+
+    // insert page number and frame into TLB
+    insertTLB(page_num, frame_number);
+    int physical_address = (frame_number << 8) | offset;
+
+    printf("Physical address: %d Value: %d\n", physical_address, physical_memory[frame_number][offset]);
+}
+
+
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -80,18 +158,29 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    char address[12]; //used to contain a single address
+    //init page_table
+    // int i;
+    // for (i = 0; i < 256; i++) {
+    //     page_table[i] = -1;
+    // }
+    int addresses_counted = 0;
+    char address[10]; //used to contain a single address
     int logical_address; //used to contain the int version of address
     int page_num, offset;
-    int i = 0;
-    while (fgets(address, 12, fp) != NULL) {
-        printf("%d\n", i);
-        i++;
+    while (fgets(address, 10, fp) != NULL) {
         logical_address = atoi(address);
-        page_num, offset = producePageNumber(logical_address);
-        getFromPageTable(page_num, offset);
+        producePageNumber(logical_address, &page_num, &offset);
+        consultPageTable(page_num, offset);
+        addresses_counted++;
     }
 
+    printf("Number of Translated Addresses = %d\n", addresses_counted);
+    printf("Page Faults = %d\n", page_fault_count);
+    float page_fault_rate = (double)page_fault_count / addresses_counted;
+    printf("Page Fault Rate = %.3f\n", page_fault_rate);
+    printf("TLB Hits = %d\n", TLB_hits);
+    float TLB_hit_rate = (double)TLB_hits / addresses_counted;
+    printf("TLB Hit Rate = %.3f\n", TLB_hit_rate);
 
     fclose(fp);
     fclose(backing_store);
