@@ -5,7 +5,13 @@
 #include <string.h>
 #include <math.h>
 
-int page_table[256][2];
+
+#define TLB_SIZE 16
+#define PAGE_TABLE_SIZE 256
+#define FRAME_SIZE
+#define FRAME_COUNT 256
+
+int page_table[PAGE_TABLE_SIZE][2];
 int TLB[16][2];
 int physical_memory[256][256];
 int frame_count = 0;
@@ -15,59 +21,25 @@ int page_count = 0;
 int page_fault_count = 0;
 int TLB_count = 0;
 int TLB_hits = 0;
+int TLB_hit = 0; //false
+int clock = 0;
+int timer[FRAME_COUNT];
 FILE *backing_store;
 
 void insertTLB(int page_num, int frame_num) {
     int i;
+
     for (i = 0; i < TLB_count; i++) {
-        if (TLB[i][0] == page_num) {
-            break;
-            printf("Entry already in TLB\n");
-            //REMOVE THIS FOR LOOP??
-        }
+        if (TLB[i][0] == page_num) break;
     }
 
-    // if index = num entries
-    if (i == TLB_count) {
-        // if space available in TLB, insert page number and frame number
-        if (TLB_count < 16) {
-            TLB[TLB_count][0] = page_num;
-            TLB[TLB_count][1] = frame_num;
-        }
-        // else make space
-        else{ 
-            for (i = 0; i < 15; i++) {
-                TLB[i][0] = TLB[i+1][0];
-                TLB[i][1] = TLB[i+1][1];
-            }
+    if (TLB_count >= TLB_SIZE) TLB_count = 0;
 
-            TLB[TLB_count-1][0] = page_num;
-            TLB[TLB_count-1][1] = frame_num;
-        }
-    }
-
-    // if index != num entries
-    else {
-        // move stuff over
-        for (; i < TLB_count - 1; i++) {
-            TLB[i][0] = TLB[i+1][0];
-            TLB[i][1] = TLB[i+1][1];
-        }
-        // if space available
-        if (TLB_count < 16) {
-            TLB[TLB_count][0] = page_num;
-            TLB[TLB_count][1] = frame_num;
-        }
-        // go left one if space NOT available
-        else {
-            TLB[TLB_count-1][0] = page_num;
-            TLB[TLB_count-1][1] = frame_num;
-        }
-    }
-    if (TLB_count < 16) {
-        TLB_count++;
-    }
+    TLB[TLB_count][0] = page_num;
+    TLB[TLB_count][1] = frame_num;
+    TLB_count++;
 }
+
 
 
 void readBackingStore(int page_num) {
@@ -81,16 +53,29 @@ void readBackingStore(int page_num) {
     if (fread(temp, sizeof(signed char), 256, backing_store) == 0) {
         fprintf(stderr, "Error reading BACKING_STORE.bin\n");
     }
+
+    // protect against out of bounds frame number
+    if (available_frame >= FRAME_COUNT) available_frame = 0;
     
     int i;
     for (i = 0; i < 256; i++) {
         physical_memory[available_frame][i] = temp[i];
     }
 
+    // is this FOR loop necessary????
+    for (i = 0; i < PAGE_TABLE_SIZE; i++) {
+        if (page_table[i][1] == available_frame) {
+            page_table[i][1] = -1;
+        }
+    }
+
+
+
     page_table[available_page][0] = page_num;
     page_table[available_page][1] = available_frame;
     available_frame++;
     available_page++;
+
 }
 
 
@@ -103,26 +88,30 @@ void producePageNumber(int logical_address, int *page_number, int *offset) {
 
 void consultPageTable(int page_num, int offset) {
     int frame_number = -1;
+    TLB_hit = 0;
     int i;
     // attempt to obtain frame number from TLB
-    for (i = 0; i < available_page; i++) {
+    for (i = 0; i < TLB_SIZE; i++) {
         if (TLB[i][0] == page_num) {
             //printf("TLB HIT\n");
             frame_number = TLB[i][1];
             TLB_hits++;
+            TLB_hit = 1;
+            break;
         }
     }
 
     // if not found in TLB, attempt to obtain frame number from the page table
     if (frame_number == -1) {
-        for (i = 0; i < available_page; i++) {
+        for (i = 0; i <= available_page; i++) {
             if (page_table[i][0] == page_num) {
                 frame_number = page_table[i][1];
                 //printf("TLB MISS w/o NO PAGE FAULT\n");
             }
         }
     }
-     // not found, so read from backing store and page fault
+    
+     // if still not found, read from backing store and page fault & FIFO
     if (frame_number == -1) {
         readBackingStore(page_num);
         page_fault_count++;
@@ -131,8 +120,11 @@ void consultPageTable(int page_num, int offset) {
     }
 
     // insert page number and frame into TLB
-    insertTLB(page_num, frame_number);
+    if (!TLB_hit) insertTLB(page_num, frame_number);
     int physical_address = (frame_number << 8) | offset;
+
+    clock++;
+    timer[frame_number] = clock;
 
     printf("Physical address: %d Value: %d\n", physical_address, physical_memory[frame_number][offset]);
 }
@@ -172,6 +164,7 @@ int main(int argc, char *argv[]) {
         producePageNumber(logical_address, &page_num, &offset);
         consultPageTable(page_num, offset);
         addresses_counted++;
+        printf("%d\n", addresses_counted);
     }
 
     printf("Number of Translated Addresses = %d\n", addresses_counted);
