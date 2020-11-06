@@ -70,7 +70,7 @@ void readBackingStore(int page_num) {
         fprintf(stderr, "Error reading BACKING_STORE.bin\n");
     }
 
-    // protect against out of bounds frame number
+    // find first available frame in physical memory
     if (available_page >= FRAME_COUNT)  {
         available_frame = LRU(timer, FRAME_COUNT);
     }
@@ -87,11 +87,15 @@ void readBackingStore(int page_num) {
         }
     }
 
-    page_table[available_page][0] = page_num;
-    page_table[available_page][1] = available_frame;
+    // page_table[page_num][1] = available_frame;
+
+    // if (available_frame < FRAME_COUNT) available_frame++;
+    // available_page++;
+
+    page_table[page_num][0] = page_num;
+    page_table[page_num][1] = available_frame;
     if (available_frame < FRAME_COUNT) available_frame++;
     available_page++;
-
 }
 
 
@@ -119,7 +123,7 @@ void consultPageTable(int page_num, int offset) {
 
     // if not found in TLB, attempt to obtain frame number from the page table
     if (frame_number == -1) {
-        for (i = 0; i <= available_page; i++) {
+        for (i = 0; i <= page_num; i++) {
             if (page_table[i][0] == page_num) {
                 frame_number = page_table[i][1];
                 //printf("TLB MISS w/o NO PAGE FAULT\n");
