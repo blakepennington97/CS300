@@ -1,5 +1,5 @@
 // Pennington.Jesse
-// Doesn't use page replacements
+// Uses FIFO
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,18 +12,14 @@
 #define FRAME_COUNT 256
 
 int page_table[PAGE_TABLE_SIZE][2];
-int TLB[16][2];
+int TLB[TLB_SIZE][2];
 int physical_memory[256][256];
-int frame_count = 0;
 int available_frame = 0;
 int available_page = 0;
-int page_count = 0;
 int page_fault_count = 0;
 int TLB_count = 0;
 int TLB_hits = 0;
 int TLB_hit = 0; //false
-int clock = 0;
-int timer[FRAME_COUNT];
 FILE *backing_store;
 
 void insertTLB(int page_num, int frame_num) {
@@ -41,7 +37,7 @@ void insertTLB(int page_num, int frame_num) {
 }
 
 
-
+// Read from backing store and use FIFO 
 void readBackingStore(int page_num) {
     //seek from beginning of bin
     if (fseek(backing_store, page_num * 256, SEEK_SET) != 0) {
@@ -68,8 +64,6 @@ void readBackingStore(int page_num) {
             page_table[i][1] = -1;
         }
     }
-
-
 
     page_table[available_page][0] = page_num;
     page_table[available_page][1] = available_frame;
@@ -122,9 +116,6 @@ void consultPageTable(int page_num, int offset) {
     // insert page number and frame into TLB
     if (!TLB_hit) insertTLB(page_num, frame_number);
     int physical_address = (frame_number << 8) | offset;
-
-    clock++;
-    timer[frame_number] = clock;
 
     printf("Physical address: %d Value: %d\n", physical_address, physical_memory[frame_number][offset]);
 }
