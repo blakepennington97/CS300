@@ -1,34 +1,48 @@
 // Pennington.Jesse
-// Uses FIFO
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
+// *********************************************************************************
+// This is a virtual memory manager system that translates logical to physical
+// addresses.
+// 
+// Basic structure inclues a page table, TLB, and physical address space.
+// Uses 256 frames.
+//
+// For the page replacement implementation, this program uses the FIFO strategy.
+//
+// To translate a logical address to a physical address, the program will first 
+// generate a page number and offset required for further use. It will then attempt
+// to extract the frame number from the TLB. If not able, it will then attempt to 
+// extract it from the page table. If also not able, this program will read from
+// the BACKING_STORE.bin (mimicking a physical disk) to extract, then
+// accordingly updating the page table and TLB.
+//
+// To execute this program, run make, then ./manager1.c addresses.txt
+// *********************************************************************************
+
 
 #define TLB_SIZE 16
 #define PAGE_TABLE_SIZE 256
-#define FRAME_SIZE
+#define FRAME_SIZE 256
 #define FRAME_COUNT 256
 
 int page_table[PAGE_TABLE_SIZE][2];
 int TLB[TLB_SIZE][2];
-int physical_memory[256][256];
+int physical_memory[FRAME_COUNT][FRAME_SIZE];
 int available_frame = 0;
 int available_page = 0;
 int page_fault_count = 0;
 int TLB_count = 0;
 int TLB_hits = 0;
-int TLB_hit = 0; //false
+int TLB_hit = 0; // bool
 FILE *backing_store;
 
+
+// insert page number and frame number into TLB
 void insertTLB(int page_num, int frame_num) {
-    int i;
-
-    for (i = 0; i < TLB_count; i++) {
-        if (TLB[i][0] == page_num) break;
-    }
-
     if (TLB_count >= TLB_SIZE) TLB_count = 0;
 
     TLB[TLB_count][0] = page_num;
@@ -44,7 +58,7 @@ void readBackingStore(int page_num) {
         fprintf(stderr, "Error seeking BACKING_STORE.bin\n");
     }
 
-    signed char temp[256];
+    signed char temp[256]; // stores value from bin
     //read 256 bytes from bin
     if (fread(temp, sizeof(signed char), 256, backing_store) == 0) {
         fprintf(stderr, "Error reading BACKING_STORE.bin\n");
@@ -53,26 +67,27 @@ void readBackingStore(int page_num) {
     // protect against out of bounds frame number
     if (available_frame >= FRAME_COUNT) available_frame = 0;
     
+    // place value in physical memory
     int i;
     for (i = 0; i < 256; i++) {
         physical_memory[available_frame][i] = temp[i];
     }
 
-    // is this FOR loop necessary????
+    // fixes a missing page fault rate in output
     for (i = 0; i < PAGE_TABLE_SIZE; i++) {
         if (page_table[i][1] == available_frame) {
             page_table[i][1] = -1;
         }
     }
 
+    // update page table appropriately
     page_table[available_page][0] = page_num;
     page_table[available_page][1] = available_frame;
     available_frame++;
     available_page++;
-
 }
 
-
+// splits logical address into its appropriate page number and offset
 void producePageNumber(int logical_address, int *page_number, int *offset) {
     //printf("page#: %d offset: %d\n", page_num, offset);
     printf("Virtual address: %d ", logical_address);
@@ -80,6 +95,7 @@ void producePageNumber(int logical_address, int *page_number, int *offset) {
     *offset = logical_address & 0xFF;
 }
 
+// attempts to get frame number from TLB and Page Table
 void consultPageTable(int page_num, int offset) {
     int frame_number = -1;
     TLB_hit = 0;
@@ -100,7 +116,7 @@ void consultPageTable(int page_num, int offset) {
         for (i = 0; i <= available_page; i++) {
             if (page_table[i][0] == page_num) {
                 frame_number = page_table[i][1];
-                //printf("TLB MISS w/o NO PAGE FAULT\n");
+                //printf("TLB MISS w/o PAGE FAULT\n");
             }
         }
     }
@@ -134,28 +150,24 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error opening %s\n", argv[1]);
     }
 
-    //open BACKING_STORE.bin
+    // open BACKING_STORE.bin
     backing_store = fopen("BACKING_STORE.bin", "rb");
     if (backing_store == NULL) {
         fprintf(stderr, "Error opening BACKING_STORE.bin\n");
         exit(0);
     }
 
-    //init page_table
-    // int i;
-    // for (i = 0; i < 256; i++) {
-    //     page_table[i] = -1;
-    // }
-    int addresses_counted = 0;
-    char address[10]; //used to contain a single address
-    int logical_address; //used to contain the int version of address
-    int page_num, offset;
+    int addresses_counted = 0; // simple counter
+    char address[10]; // used to contain a single address
+    int logical_address; // used to contain the int version of address
+    int page_num, offset; // used for paging logic
+
+    // loop through input file and "run" the VMM on the input
     while (fgets(address, 10, fp) != NULL) {
         logical_address = atoi(address);
         producePageNumber(logical_address, &page_num, &offset);
         consultPageTable(page_num, offset);
         addresses_counted++;
-        printf("%d\n", addresses_counted);
     }
 
     printf("Number of Translated Addresses = %d\n", addresses_counted);
